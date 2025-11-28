@@ -240,7 +240,10 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
     initial_view = pdk.ViewState(
         latitude=user_lat,
         longitude=user_lon,
-        zoom=14 if view_mode == "상세 보기_
+        zoom=14 if view_mode == "상세 보기 (개별 AED)" else 12,
+    pitch=45,
+    bearing=15,
+)
 
 
 # =========================================
