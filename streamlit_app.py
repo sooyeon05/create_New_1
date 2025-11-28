@@ -281,11 +281,12 @@ tooltip = {
 }
 
 deck = pdk.Deck(
-    map_style="mapbox://styles/mapbox/light-v10",  # 평면 라이트 지도
+    map_style=None,   # ✅ 기본 CARTO/OSM 지도 사용 (토큰 필요 없음)
     initial_view_state=initial_view,
     layers=layers,
     tooltip=tooltip,
 )
+
 
 st.pydeck_chart(deck)
 
