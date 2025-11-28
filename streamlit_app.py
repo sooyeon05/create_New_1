@@ -65,7 +65,6 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-
 # =========================================
 # 3. 사이드바: 현재 위치 입력
 # =========================================
@@ -77,4 +76,198 @@ search_text = st.sidebar.text_input(
 )
 
 st.sidebar.markdown("---")
-st.sideb
+st.sidebar.markdown("또는 아래에 **직접 위도/경도**를 입력할 수도 있습니다.")
+manual_lat = st.sidebar.number_input("위도 직접 입력 (선택)", value=0.0, format="%.6f")
+manual_lon = st.sidebar.number_input("경도 직접 입력 (선택)", value=0.0, format="%.6f")
+use_manual = st.sidebar.checkbox("직접 입력한 위도/경도 사용", value=False)
+
+find_button = st.sidebar.button("가장 가까운 AED 찾기")
+
+
+# =========================================
+# 4. 주소 → 좌표 변환 (지오코딩)
+# =========================================
+def geocode(query: str):
+    """주소/장소명 → (위도, 경도) 변환 (OpenStreetMap Nominatim 사용)"""
+    if not query:
+        return None
+
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": query,
+        "format": "json",
+        "limit": 1,
+        "countrycodes": "kr",  # 한국 안에서만 검색
+    }
+    headers = {"User-Agent": "aed-streamlit-demo"}
+
+    try:
+        res = requests.get(url, params=params, headers=headers, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        if not data:
+            return None
+        lat = float(data[0]["lat"])
+        lon = float(data[0]["lon"])
+        return lat, lon
+    except Exception:
+        return None
+
+
+user_lat, user_lon = None, None
+info_msg = ""
+
+if find_button:
+    if use_manual and manual_lat != 0.0 and manual_lon != 0.0:
+        # 직접 입력 좌표 사용
+        user_lat, user_lon = manual_lat, manual_lon
+        info_msg = f"직접 입력하신 좌표를 사용합니다. (위도 {user_lat:.6f}, 경도 {user_lon:.6f})"
+    else:
+        # 주소/장소명으로 검색
+        if search_text.strip() == "":
+            info_msg = "검색어가 비어 있습니다. 주소나 장소명을 입력하거나, 위도·경도를 직접 입력해 주세요."
+        else:
+            result = geocode(search_text)
+            if result is None:
+                info_msg = "검색어로 좌표를 찾지 못했습니다. 다른 표현으로 다시 시도해 보시거나, 위도·경도를 직접 입력해 주세요."
+            else:
+                user_lat, user_lon = result
+                info_msg = f"검색 결과 좌표: 위도 {user_lat:.6f}, 경도 {user_lon:.6f}"
+
+if info_msg:
+    st.info(info_msg)
+
+
+# =========================================
+# 5. 현재 위치 기준 가장 가까운 AED 찾기
+# =========================================
+nearest_row = None
+nearest_df = None
+
+if user_lat is not None and user_lon is not None:
+    df_distance = df.copy()
+    df_distance["distance_km"] = df_distance.apply(
+        lambda row: haversine(user_lat, user_lon, row["위도"], row["경도"]),
+        axis=1,
+    )
+    df_distance = df_distance.sort_values("distance_km")
+    nearest_row = df_distance.iloc[0]
+    nearest_df = df_distance.head(5)
+
+
+# =========================================
+# 6. 지도 그리기 (pydeck)
+# =========================================
+st.subheader("🗺 서울시 AED 위치 지도")
+
+# 기본은 서울 시청 근처
+initial_view = pdk.ViewState(
+    latitude=37.5665,
+    longitude=126.9780,
+    zoom=11,
+    pitch=0,
+)
+
+# AED 전체를 파란 동그라미로 표시
+aed_layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=df,
+    get_position="[경도, 위도]",  # 경도, 위도 순서
+    get_radius=50,               # 미터 단위
+    radius_min_pixels=2,
+    radius_max_pixels=10,
+    get_fill_color="[0, 0, 255, 150]",  # 파란 계열
+    pickable=True,
+)
+
+layers = [aed_layer]
+
+# 사용자 위치 + 가장 가까운 AED 표시
+if user_lat is not None and user_lon is not None and nearest_row is not None:
+    user_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=pd.DataFrame([{"위도": user_lat, "경도": user_lon}]),
+        get_position="[경도, 위도]",
+        get_radius=80,
+        radius_min_pixels=6,
+        get_fill_color="[255, 0, 0, 220]",  # 빨간색 (사용자 위치)
+    )
+
+    nearest_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=pd.DataFrame([{
+            "위도": nearest_row["위도"],
+            "경도": nearest_row["경도"],
+        }]),
+        get_position="[경도, 위도]",
+        get_radius=100,
+        radius_min_pixels=7,
+        get_fill_color="[0, 200, 0, 230]",  # 초록색 (가장 가까운 AED)
+    )
+
+    layers.extend([user_layer, nearest_layer])
+
+    # 지도 중심을 사용자 위치로 이동
+    initial_view = pdk.ViewState(
+        latitude=user_lat,
+        longitude=user_lon,
+        zoom=14,
+        pitch=0,
+    )
+
+# 마우스 오버했을 때 나오는 정보(툴팁)
+tooltip = {
+    "html": "<b>{설치기관명}</b><br/>{설치기관주소}<br/>설치위치: {설치위치}",
+    "style": {"backgroundColor": "white", "color": "black"},
+}
+
+deck = pdk.Deck(
+    map_style=None,  # Mapbox 토큰 없이 기본 지도 사용
+    initial_view_state=initial_view,
+    layers=layers,
+    tooltip=tooltip,
+)
+
+st.pydeck_chart(deck)
+
+st.markdown(
+    """
+**지도 표시 설명**
+
+- 🔵 파란 점 : 서울시 전체 AED 위치  
+- 🔴 빨간 점 : (입력한) 현재 위치  
+- 🟢 초록 점 : 현재 위치에서 가장 가까운 AED  
+    """
+)
+
+
+# =========================================
+# 7. 가장 가까운 AED 상세 정보
+# =========================================
+if nearest_row is not None:
+    st.subheader("📍 현재 위치에서 가장 가까운 AED 정보")
+
+    col1, col2 = st.columns(2)
+
+    # ⚠️ 여기서도 컬럼 이름은 CSV에 맞게 조정 가능
+    with col1:
+        st.markdown(f"**설치기관명:** {nearest_row.get('설치기관명', '정보 없음')}")
+        st.markdown(f"**설치위치:** {nearest_row.get('설치위치', '정보 없음')}")
+        st.markdown(f"**주소:** {nearest_row.get('설치기관주소', '정보 없음')}")
+
+    with col2:
+        st.markdown(f"**관리책임자:** {nearest_row.get('관리책임자명', '정보 없음')}")
+        st.markdown(f"**연락처:** {nearest_row.get('관리자연락처', '정보 없음')}")
+        st.markdown(f"**예상 거리:** {nearest_row['distance_km']:.2f} km")
+
+    st.markdown("#### 주변 상위 5개 AED 목록 (거리 순)")
+    show_cols = ["설치기관명", "설치기관주소", "설치위치", "distance_km"]
+    existing_cols = [c for c in show_cols if c in nearest_df.columns]
+
+    st.dataframe(
+        nearest_df[existing_cols]
+        .rename(columns={"distance_km": "거리(km)"})
+        .style.format({"거리(km)": "{:.2f}"})
+    )
+else:
+    st.info("좌측 사이드바에서 주소 또는 위도/경도를 입력한 뒤 **[가장 가까운 AED 찾기]** 버튼을 눌러보세요.")
