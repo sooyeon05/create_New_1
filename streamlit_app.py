@@ -9,7 +9,7 @@ st.title("🧯 서울시 AED 위치 지도 (기본 버전)")
 @st.cache_data
 def load_data():
     # 파일명은 여러분이 가진 파일명으로 맞춰주세요
-    df = pd.read_csv("aed_seoul.csv", encoding="cp949")
+    df = pd.read_csv("aed_seoul.csv.csv", encoding="cp949")
     # 위도/경도 컬럼 이름이 실제 파일과 같은지 꼭 확인!
     df = df.dropna(subset=["위도", "경도"])
     df["위도"] = df["위도"].astype(float)
