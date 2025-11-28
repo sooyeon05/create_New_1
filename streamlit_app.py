@@ -157,21 +157,24 @@ if user_lat is not None and user_lon is not None:
 
 
 # =========================================
-# 6. 지도 그리기 (pydeck) - 2D, 구별 요약 + 상세
+# 6. 지도 그리기 (pydeck) - 2D, 모드별 깔끔하게
 # =========================================
-st.subheader("🗺 서울시 AED 지도 (구별 요약 + 상세)")
+st.subheader("🗺 서울시 AED 지도")
 
-# 6-1. 구(區) 단위 요약 데이터 만들기
+view_mode = st.radio(
+    "지도 보기 모드",
+    ["요약 보기 (구별 분포)", "상세 보기 (개별 AED)"],
+    horizontal=True,
+)
+
+# 6-1. 구(區) 단위 요약 데이터
 df_gu = df.copy()
-
 if "설치기관주소" in df_gu.columns:
-    # 주소에서 '○○구'만 추출
     df_gu["구"] = df_gu["설치기관주소"].str.extract(r"(\S+구)")[0]
 else:
     df_gu["구"] = None
 
 df_gu = df_gu.dropna(subset=["구"])
-
 df_gu_grouped = (
     df_gu.groupby("구")
     .agg(
@@ -181,63 +184,74 @@ df_gu_grouped = (
     )
     .reset_index()
 )
-
-# 동그라미 크기(반경, m) – 최소 400m, 최대 2000m
 df_gu_grouped["radius_m"] = (400 + df_gu_grouped["count"] * 4).clip(400, 2000)
 df_gu_grouped["label"] = df_gu_grouped.apply(
     lambda r: f"{r['구']}\n{r['count']}개", axis=1
 )
 
-# 6-2. 기본 뷰 (완전 2D: pitch=0)
+# 6-2. 기본 뷰 (2D)
 initial_view = pdk.ViewState(
     latitude=37.5665,
     longitude=126.9780,
-    zoom=11,
-    pitch=0,   # ← 3D 기울기 없음
+    zoom=11 if view_mode.startswith("요약") else 13,
+    pitch=0,
     bearing=0,
 )
 
 layers = []
 
-# 6-3. 구별 요약 동그라미 레이어 (주황색 큰 원)
-if not df_gu_grouped.empty:
-    gu_circle_layer = pdk.Layer(
+# ---------------- 요약 모드 ----------------
+if view_mode == "요약 보기 (구별 분포)":
+    # 구별 큰 동그라미
+    if not df_gu_grouped.empty:
+        gu_circle_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df_gu_grouped,
+            get_position="[경도, 위도]",
+            get_radius="radius_m",
+            get_fill_color="[255, 176, 59, 110]",   # 조금 더 밝은 주황
+            get_line_color="[255, 255, 255, 230]",
+            line_width_min_pixels=1,
+            pickable=False,
+        )
+
+        gu_text_layer = pdk.Layer(
+            "TextLayer",
+            data=df_gu_grouped,
+            get_position="[경도, 위도]",
+            get_text="label",
+            get_color="[60, 60, 60, 255]",
+            get_size=16,
+            get_alignment_baseline="'center'",
+        )
+
+        layers.extend([gu_circle_layer, gu_text_layer])
+
+    # 부드러운 히트맵 (점 대신 느낌만)
+    heat_layer = pdk.Layer(
+        "HeatmapLayer",
+        data=df,
+        get_position="[경도, 위도]",
+        aggregation="'SUM'",
+        opacity=0.35,
+    )
+    layers.append(heat_layer)
+
+# ---------------- 상세 모드 ----------------
+if view_mode == "상세 보기 (개별 AED)":
+    aed_layer = pdk.Layer(
         "ScatterplotLayer",
-        data=df_gu_grouped,
+        data=df,
         get_position="[경도, 위도]",
-        get_radius="radius_m",
-        get_fill_color="[255, 153, 0, 90]",    # 부드러운 주황 반투명
-        get_line_color="[255, 255, 255, 220]",
-        line_width_min_pixels=1,
-        pickable=False,
+        get_radius=18,                 # 조금 작은 점
+        radius_min_pixels=2,
+        radius_max_pixels=6,
+        get_fill_color="[0, 123, 255, 170]",  # 차분한 블루
+        pickable=True,
     )
+    layers.append(aed_layer)
 
-    gu_text_layer = pdk.Layer(
-        "TextLayer",
-        data=df_gu_grouped,
-        get_position="[경도, 위도]",
-        get_text="label",
-        get_color="[70, 70, 70, 255]",
-        get_size=16,
-        get_alignment_baseline="'top'",
-    )
-
-    layers.extend([gu_circle_layer, gu_text_layer])
-
-# 6-4. 개별 AED 점 레이어 (항상 같이, 작게 표시)
-aed_layer = pdk.Layer(
-    "ScatterplotLayer",
-    data=df,
-    get_position="[경도, 위도]",
-    get_radius=25,                # m 단위 – 줌 아웃 상태에선 거의 점처럼
-    radius_min_pixels=1,
-    radius_max_pixels=5,
-    get_fill_color="[30, 144, 255, 150]",   # 파스텔 블루
-    pickable=True,
-)
-layers.append(aed_layer)
-
-# 6-5. 현재 위치 + 가장 가까운 AED 표시
+# 공통: 현재 위치 + 가장 가까운 AED 표시
 if user_lat is not None and user_lon is not None and nearest_row is not None:
     user_layer = pdk.Layer(
         "ScatterplotLayer",
@@ -245,7 +259,7 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
         get_position="[경도, 위도]",
         get_radius=80,
         radius_min_pixels=6,
-        get_fill_color="[255, 77, 77, 230]",  # 빨간색 (현재 위치)
+        get_fill_color="[255, 77, 77, 230]",  # 빨간색
     )
 
     nearest_layer = pdk.Layer(
@@ -256,21 +270,20 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
         get_position="[경도, 위도]",
         get_radius=100,
         radius_min_pixels=7,
-        get_fill_color="[0, 200, 140, 250]",  # 초록색 (가장 가까운 AED)
+        get_fill_color="[0, 200, 140, 250]",  # 초록색
     )
 
     layers.extend([user_layer, nearest_layer])
 
-    # 현재 위치 기준으로 조금 더 확대
     initial_view = pdk.ViewState(
         latitude=user_lat,
         longitude=user_lon,
-        zoom=14,
-        pitch=0,   # 여기도 2D 유지
+        zoom=14 if view_mode == "상세 보기 (개별 AED)" else 12,
+        pitch=0,
         bearing=0,
     )
 
-# 6-6. 툴팁 설정
+# 6-3. 툴팁 & 지도 렌더링
 tooltip = {
     "html": """
     <b>{설치기관명}</b><br/>
@@ -281,12 +294,11 @@ tooltip = {
 }
 
 deck = pdk.Deck(
-    map_style=None,   # ✅ 기본 CARTO/OSM 지도 사용 (토큰 필요 없음)
+    map_style=None,   # 기본 2D 지도
     initial_view_state=initial_view,
     layers=layers,
     tooltip=tooltip,
 )
-
 
 st.pydeck_chart(deck)
 
@@ -294,12 +306,17 @@ st.markdown(
     """
 **지도 읽는 법**
 
-- 🟠 주황색 큰 동그라미 : 각 **구(區)별 AED 개수 요약**  
-  - 동그라미 안 텍스트에 `○○구 / N개`로 표시됩니다.  
-- 🔵 작은 파란 점 : 개별 AED 1개  
-  - 지도를 확대할수록 더 세세하게 보입니다.  
-- 🔴 빨간 점 : (사용자가 입력한) 현재 위치  
-- 🟢 초록 점 : 현재 위치에서 가장 가까운 AED
+- **요약 보기 (구별 분포)**  
+  - 🟠 주황색 동그라미 : 각 **구(區)별 AED 개수**  
+  - 배경의 색 번짐(히트맵)으로 AED가 많이 몰린 지역을 부드럽게 표시  
+
+- **상세 보기 (개별 AED)**  
+  - 🔵 파란 점 하나가 AED 1대를 의미  
+  - 지도를 확대해서 건물·블록 단위로 확인 가능  
+
+- 공통  
+  - 🔴 빨간 점 : 현재 위치  
+  - 🟢 초록 점 : 현재 위치에서 가장 가까운 AED
 """
 )
 
