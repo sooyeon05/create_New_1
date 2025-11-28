@@ -241,8 +241,43 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
         latitude=user_lat,
         longitude=user_lon,
         zoom=14 if view_mode == "상세 보기 (개별 AED)" else 12,
-    pitch=45,
-    bearing=15,
+        pitch=45,
+        bearing=15,
+    )
+
+# ==================================================
+# (4) ToolTip
+# ==================================================
+tooltip = {
+    "html": """
+    <b>{설치기관명}</b><br/>
+    {설치기관주소}<br/>
+    설치위치: {설치위치}
+    """,
+    "style": {"backgroundColor": "white", "color": "black"},
+}
+
+# ==================================================
+# (5) 맵 스타일 (세련된 스타일)
+# ==================================================
+deck = pdk.Deck(
+    map_style="mapbox://styles/mapbox/light-v10",   # 라이트 그레이톤 고급 지도
+    initial_view_state=initial_view,
+    layers=layers,
+    tooltip=tooltip,
+)
+
+st.pydeck_chart(deck)
+
+st.markdown(
+    """
+**지도 설명**
+
+- 🟦 상세 보기: 파스텔 블루 점으로 AED 위치 표시  
+- 🟩 초록 점: 현재 위치에서 가장 가까운 AED  
+- 🟥 빨간 점: 사용자가 입력한 현재 위치  
+- 🟧 요약 보기(3D): AED 밀집도를 직관적으로 보여주는 고급 3D 육각 기둥  
+"""
 )
 
 
