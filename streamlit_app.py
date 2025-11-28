@@ -154,19 +154,19 @@ if user_lat is not None and user_lon is not None:
     nearest_row = df_distance.iloc[0]
     nearest_df = df_distance.head(5)
 
-# =========================================
-# 6. 지도 그리기 (pydeck) - 고급 스타일 버전
-# =========================================
-st.subheader("🗺 서울시 AED 위치 지도 (고급 스타일)")
 
-# 모드 선택
+
+# =========================================
+# 6. 지도 그리기 (pydeck) - 정상적이고 예쁜 3D HEXAGON 지도
+# =========================================
+st.subheader("🗺 서울시 AED 위치 지도 (고급 HEXAGON 스타일)")
+
 view_mode = st.radio(
     "지도 모드 선택",
     ["요약 보기 (3D 분포)", "상세 보기 (개별 AED)"],
     horizontal=True,
 )
 
-# 기본 뷰
 initial_view = pdk.ViewState(
     latitude=37.5665,
     longitude=126.9780,
@@ -178,42 +178,49 @@ initial_view = pdk.ViewState(
 layers = []
 
 # ==================================================
-# (1) 요약 보기 — 3D HexagonLayer
+# (1) 요약 보기 — HexagonLayer (정상 설정)
 # ==================================================
 if view_mode == "요약 보기 (3D 분포)":
     hex_layer = pdk.Layer(
         "HexagonLayer",
         data=df,
         get_position="[경도, 위도]",
-        radius=200,          # 육각형 크기
-        elevation_scale=80,   # 높이 비율
-        elevation_range=[0, 1500],
-        extruded=True,        # 3D 활성화
+        radius=350,               # ★ hexagon 크기 적당하게 크게
+        elevation_scale=30,       # ★ 기둥 높이 적당하게
+        elevation_range=[0, 600],
+        extruded=True,
         coverage=0.85,
+        opacity=0.6,
         pickable=True,
-        opacity=0.6,          # 반투명
+        color_range=[
+            [255, 255, 204],
+            [255, 237, 160],
+            [254, 217, 118],
+            [254, 178, 76],
+            [253, 141, 60],
+            [240, 59, 32],
+        ],  # 예쁜 주황 계열
     )
     layers.append(hex_layer)
 
 # ==================================================
-# (2) 상세 보기 — ScatterplotLayer(민트/블루)
+# (2) 상세 보기 — ScatterplotLayer
 # ==================================================
 if view_mode == "상세 보기 (개별 AED)":
     aed_layer = pdk.Layer(
         "ScatterplotLayer",
         data=df,
         get_position="[경도, 위도]",
-        get_radius=14,
+        get_radius=12,
         radius_min_pixels=2,
         radius_max_pixels=7,
-        get_fill_color="[30, 144, 255, 150]",  # 도화지에서 튀지 않는 파스텔 블루
+        get_fill_color="[30, 144, 255, 150]",  # 파스텔 블루
         pickable=True,
     )
     layers.append(aed_layer)
 
-
 # ==================================================
-# (3) 사용자 위치 + 가장 가까운 AED 표시
+# (3) 사용자 위치 + 가장 가까운 AED (공통)
 # ==================================================
 if user_lat is not None and user_lon is not None and nearest_row is not None:
     user_layer = pdk.Layer(
@@ -222,7 +229,7 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
         get_position="[경도, 위도]",
         get_radius=80,
         radius_min_pixels=7,
-        get_fill_color="[255, 77, 77, 230]",  # Red
+        get_fill_color="[255, 77, 77, 230]",
     )
     nearest_layer = pdk.Layer(
         "ScatterplotLayer",
@@ -232,11 +239,10 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
         get_position="[경도, 위도]",
         get_radius=100,
         radius_min_pixels=7,
-        get_fill_color="[0, 200, 140, 250]",  # Mint Green
+        get_fill_color="[0, 200, 140, 250]",
     )
     layers.extend([user_layer, nearest_layer])
 
-    # Zoom 조절
     initial_view = pdk.ViewState(
         latitude=user_lat,
         longitude=user_lon,
@@ -246,7 +252,7 @@ if user_lat is not None and user_lon is not None and nearest_row is not None:
     )
 
 # ==================================================
-# (4) ToolTip
+# (4) tooltip
 # ==================================================
 tooltip = {
     "html": """
@@ -258,10 +264,10 @@ tooltip = {
 }
 
 # ==================================================
-# (5) 맵 스타일 (세련된 스타일)
+# (5) map style
 # ==================================================
 deck = pdk.Deck(
-    map_style="mapbox://styles/mapbox/light-v10",   # 라이트 그레이톤 고급 지도
+    map_style="mapbox://styles/mapbox/light-v10",
     initial_view_state=initial_view,
     layers=layers,
     tooltip=tooltip,
@@ -269,16 +275,6 @@ deck = pdk.Deck(
 
 st.pydeck_chart(deck)
 
-st.markdown(
-    """
-**지도 설명**
-
-- 🟦 상세 보기: 파스텔 블루 점으로 AED 위치 표시  
-- 🟩 초록 점: 현재 위치에서 가장 가까운 AED  
-- 🟥 빨간 점: 사용자가 입력한 현재 위치  
-- 🟧 요약 보기(3D): AED 밀집도를 직관적으로 보여주는 고급 3D 육각 기둥  
-"""
-)
 
 
 # =========================================
