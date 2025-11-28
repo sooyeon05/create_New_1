@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title(" 서울시 AED(자동심장충격기) 위치 대시보드")
+st.title(" 🚨서울시 AED(자동심장충격기) 위치 대시보드")
 st.caption("서울시 AED 공개 데이터를 이용해 지도에 표시하고, 현재 위치 기준 가장 가까운 AED를 찾아주는 대시보드입니다.")
 
 # GitHub에 올려둔 CSV 파일 이름 (파일명 다르면 여기만 바꾸세요)
