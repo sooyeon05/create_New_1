@@ -313,37 +313,39 @@ with tab_dong:
     st.subheader("📊 행정동 단위 AED 분포 분석")
 
     # 1) 행정동 컬럼 만들기
-   df_dong = df.copy()
-   addr_col = "설치기관주소"
+    df_dong = df.copy()
+    addr_col = "설치기관주소"
 
-   if addr_col in df_dong.columns:
-    addr = df_dong[addr_col].astype(str)
+    if addr_col in df_dong.columns:
+        addr = df_dong[addr_col].astype(str)
 
-    # 1단계: 괄호 안에 있는 '○○동' 먼저 추출 (예: 167(장안동) → 장안동)
-    dong_in_paren = addr.str.extract(r"\(([^()\s]*동)\)")[0]
+        # 1단계: 괄호 안 '○○동' 추출 (예: 167(장안동) → 장안동)
+        dong_in_paren = addr.str.extract(r"\(([^()\s]*동)\)")[0]
 
-    # 2단계: '○○구 ○○동' 패턴에서 동 추출 (예: 종로구 사직동 9 → 사직동)
-    dong_after_gu = addr.str.extract(r"\S+구\s+(\S*동)")[0]
+        # 2단계: '○○구 ○○동' 패턴에서 동 추출
+        dong_after_gu = addr.str.extract(r"\S+구\s+(\S*동)")[0]
 
-    # 3단계: 괄호 안 동명이 있으면 그걸 우선, 없으면 구 뒤 동 사용
-    df_dong["행정동"] = dong_in_paren.fillna(dong_after_gu)
+        # 우선순위: 괄호 안 → 구 뒤 동
+        df_dong["행정동"] = dong_in_paren.fillna(dong_after_gu)
 
-   else:
-    df_dong["행정동"] = None
-
-# --- 비정상 동명(건물 동 등) 필터링 ---
-df_dong = df_dong.dropna(subset=["행정동"])
-df_dong["행정동"] = df_dong["행정동"].str.strip()
-
-# 101동, A동, B동, 관리동 등 제거
-mask_bad = df_dong["행정동"].str.match(r"^[0-9A-Za-z].*동") | df_dong["행정동"].str.contains("관리동")
-df_dong = df_dong[~mask_bad]
-
-
-    if df_dong.empty:
-        st.warning("설치기관주소에서 행정동 정보를 추출하지 못했습니다. 주소 형식을 한 번 확인해 주세요.")
     else:
-        # 2) 행정동별 AED 개수 집계
+        df_dong["행정동"] = None
+
+    # 3) 비정상 동명 제거 (건물 '101동', 'A동', 관리동 등)
+    df_dong = df_dong.dropna(subset=["행정동"])
+    df_dong["행정동"] = df_dong["행정동"].str.strip()
+
+    # 숫자·영문으로 시작하는 동, '관리동' 제거
+    mask_bad = (
+        df_dong["행정동"].str.match(r"^[0-9A-Za-z].*동")
+        | df_dong["행정동"].str.contains("관리동")
+    )
+    df_dong = df_dong[~mask_bad]
+
+    # 4) 행정동별 AED 개수 집계
+    if df_dong.empty:
+        st.warning("행정동 정보를 추출하지 못했습니다. 주소 형식을 확인해주세요.")
+    else:
         dong_stats = (
             df_dong.groupby("행정동")
             .agg(AED수=("행정동", "size"))
@@ -354,23 +356,21 @@ df_dong = df_dong[~mask_bad]
         st.markdown("#### 🔝 행정동별 AED 개수 (내림차순)")
         st.dataframe(dong_stats, use_container_width=True)
 
-        # 3) 상위 N개 막대그래프
+        # 5) 상위 N개 막대 그래프
         top_n = st.slider("막대그래프로 볼 상위 행정동 수", min_value=5, max_value=30, value=15, step=1)
+        st.markdown(f"#### 📈 상위 {top_n}개 행정동 AED 수")
+        st.bar_chart(dong_stats.head(top_n).set_index("행정동")["AED수"])
 
-        st.markdown(f"#### 📈 상위 {top_n}개 행정동 AED 수 막대그래프")
-        dong_chart_data = dong_stats.head(top_n).set_index("행정동")["AED수"]
-        st.bar_chart(dong_chart_data)
-
-        # 4) 특정 행정동 선택 시 상세 목록
+        # 6) 특정 행정동 상세 보기
         st.markdown("#### 🔍 행정동별 AED 상세 목록")
         selected_dong = st.selectbox("행정동 선택", dong_stats["행정동"].tolist())
 
         dong_detail = df_dong[df_dong["행정동"] == selected_dong]
 
         show_cols = [c for c in ["설치기관명", "설치기관주소", "설치위치"] if c in dong_detail.columns]
+
         st.write(f"**{selected_dong} AED 목록 (총 {len(dong_detail)}개)**")
         st.dataframe(dong_detail[show_cols], use_container_width=True)
-
 
 
 
