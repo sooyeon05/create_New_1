@@ -335,12 +335,16 @@ with tab_dong:
     df_dong = df_dong.dropna(subset=["행정동"])
     df_dong["행정동"] = df_dong["행정동"].str.strip()
 
-    # 숫자·영문으로 시작하는 동, '관리동' 제거
+    # 숫자·영문으로 시작하는 동, '관리동', 그냥 '동' 한 글자 등 제거
     mask_bad = (
-        df_dong["행정동"].str.match(r"^[0-9A-Za-z].*동")
-        | df_dong["행정동"].str.contains("관리동")
+    df_dong["행정동"].str.match(r"^[0-9A-Za-z].*동")      # 101동, A동 등
+    | df_dong["행정동"].str.contains("관리동")            # 관리동
+    | (df_dong["행정동"] == "동")                        # 그냥 '동'
+    | (df_dong["행정동"].str.len() <= 2)                 # 한 글자/두 글자 이상한 값
     )
     df_dong = df_dong[~mask_bad]
+
+
 
     # 4) 행정동별 AED 개수 집계
     if df_dong.empty:
