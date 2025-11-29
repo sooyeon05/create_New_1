@@ -314,9 +314,9 @@ with tab_dong:
 
     # 1) 행정동 컬럼 만들기
    df_dong = df.copy()
-addr_col = "설치기관주소"
+   addr_col = "설치기관주소"
 
-if addr_col in df_dong.columns:
+   if addr_col in df_dong.columns:
     addr = df_dong[addr_col].astype(str)
 
     # 1단계: 괄호 안에 있는 '○○동' 먼저 추출 (예: 167(장안동) → 장안동)
@@ -328,7 +328,7 @@ if addr_col in df_dong.columns:
     # 3단계: 괄호 안 동명이 있으면 그걸 우선, 없으면 구 뒤 동 사용
     df_dong["행정동"] = dong_in_paren.fillna(dong_after_gu)
 
-else:
+   else:
     df_dong["행정동"] = None
 
 # --- 비정상 동명(건물 동 등) 필터링 ---
