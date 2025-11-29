@@ -4,6 +4,73 @@ import pydeck as pdk
 import requests
 import math
 
+st.set_page_config(
+    page_title="서울시 AED 대시보드",
+    page_icon="💓",
+    layout="wide",
+)
+
+# 공통 스타일
+st.markdown(
+    """
+    <style>
+    /* 전체 배경 & 여백 */
+    .main {
+        background-color: #f5f7fb;
+    }
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
+    }
+
+    /* 기본 글꼴 크기 조금 키우기 */
+    html, body, [class*="css"]  {
+        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", system-ui, sans-serif;
+        font-size: 15px;
+    }
+
+    /* 상단 큰 제목 스타일 */
+    .big-title {
+        font-size: 2.1rem;
+        font-weight: 800;
+        margin-bottom: 0.1rem;
+    }
+    .subtitle {
+        font-size: 0.95rem;
+        color: #4b5563;
+        margin-bottom: 1.0rem;
+    }
+
+    /* 카드 스타일 */
+    .card {
+        background: #ffffff;
+        padding: 1rem 1.3rem;
+        border-radius: 0.9rem;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        border: 1px solid #edf1f7;
+    }
+
+    /* 섹션 제목 */
+    .section-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-top: 0.5rem;
+        margin-bottom: 0.4rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+
+
+
+
+
+
 # ========================================
 # 0. 기본 설정
 # =========================================
