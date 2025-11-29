@@ -313,14 +313,32 @@ with tab_dong:
     st.subheader("📊 행정동 단위 AED 분포 분석")
 
     # 1) 행정동 컬럼 만들기
-    df_dong = df.copy()
-    if "설치기관주소" in df_dong.columns:
-        # '○○동', '○○읍', '○○면' 패턴 추출
-        df_dong["행정동"] = df_dong["설치기관주소"].str.extract(r"(\S+[동읍면])")[0]
-    else:
-        df_dong["행정동"] = None
+   df_dong = df.copy()
+addr_col = "설치기관주소"
 
-    df_dong = df_dong.dropna(subset=["행정동"])
+if addr_col in df_dong.columns:
+    addr = df_dong[addr_col].astype(str)
+
+    # 1단계: 괄호 안에 있는 '○○동' 먼저 추출 (예: 167(장안동) → 장안동)
+    dong_in_paren = addr.str.extract(r"\(([^()\s]*동)\)")[0]
+
+    # 2단계: '○○구 ○○동' 패턴에서 동 추출 (예: 종로구 사직동 9 → 사직동)
+    dong_after_gu = addr.str.extract(r"\S+구\s+(\S*동)")[0]
+
+    # 3단계: 괄호 안 동명이 있으면 그걸 우선, 없으면 구 뒤 동 사용
+    df_dong["행정동"] = dong_in_paren.fillna(dong_after_gu)
+
+else:
+    df_dong["행정동"] = None
+
+# --- 비정상 동명(건물 동 등) 필터링 ---
+df_dong = df_dong.dropna(subset=["행정동"])
+df_dong["행정동"] = df_dong["행정동"].str.strip()
+
+# 101동, A동, B동, 관리동 등 제거
+mask_bad = df_dong["행정동"].str.match(r"^[0-9A-Za-z].*동") | df_dong["행정동"].str.contains("관리동")
+df_dong = df_dong[~mask_bad]
+
 
     if df_dong.empty:
         st.warning("설치기관주소에서 행정동 정보를 추출하지 못했습니다. 주소 형식을 한 번 확인해 주세요.")
