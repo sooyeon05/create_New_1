@@ -94,19 +94,6 @@ CSV_ENCODING = "cp949"   # 공공데이터 한글 파일은 보통 cp949
 def load_aed_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, encoding=CSV_ENCODING)
 
-    st.markdown(
-    """
-    <div class="card">
-      <div class="big-title">💓 서울시 AED 위치 대시보드</div>
-      <div class="subtitle">
-        서울시 공개 AED 데이터를 이용해 <b>가까운 AED 위치</b>와
-        <b>행정동별 분포</b>를 한눈에 볼 수 있는 대시보드입니다.
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-    )
-    st.write("")  # 살짝 간격
 
 
     # ⚠️ 아래 컬럼 이름은 CSV 파일에 맞게 한 번 확인해 보세요.
