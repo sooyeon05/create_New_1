@@ -156,92 +156,202 @@ if user_lat is not None and user_lon is not None:
 
 
 # =========================================
-# 6. 지도 (개별 AED만 표시하는 단일 모드)
+# 6. 지도 & 행정동 분석 (탭으로 분리)
 # =========================================
 
-st.subheader("🗺 서울시 AED 위치 지도 (개별 AED 표시만)")
+tab_map, tab_dong = st.tabs(["🗺 지도 / 접근성", "📊 행정동 분석"])
 
-# 기본 뷰
-initial_view = pdk.ViewState(
-    latitude=37.5665,
-    longitude=126.9780,
-    zoom=12,
-    pitch=0,
-    bearing=0,
-)
+# -------------------------------
+# 탭 1 : 지도 + 접근성 분석
+# -------------------------------
+with tab_map:
+    st.subheader("🗺 서울시 AED 위치 지도 (개별 AED + 접근성 분석)")
 
-layers = []
-
-# 🔵 개별 AED 점 레이어 (유일한 표시)
-aed_layer = pdk.Layer(
-    "ScatterplotLayer",
-    data=df,
-    get_position="[경도, 위도]",
-    get_radius=20,
-    radius_min_pixels=3,
-    radius_max_pixels=6,
-    get_fill_color="[0, 120, 255, 160]",  # 파란 점
-    pickable=True,
-)
-layers.append(aed_layer)
-
-# 현재 위치 + 가장 가까운 AED 표시
-if user_lat is not None and user_lon is not None and nearest_row is not None:
-
-    user_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=pd.DataFrame([{"위도": user_lat, "경도": user_lon}]),
-        get_position="[경도, 위도]",
-        get_radius=80,
-        radius_min_pixels=6,
-        get_fill_color="[255, 77, 77, 230]",  # 빨간색(현재위치)
-    )
-
-    nearest_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=pd.DataFrame(
-            [{"위도": nearest_row["위도"], "경도": nearest_row["경도"]}]
-        ),
-        get_position="[경도, 위도]",
-        get_radius=100,
-        radius_min_pixels=7,
-        get_fill_color="[0, 200, 140, 250]",  # 초록색(가장 가까운 AED)
-    )
-
-    layers.extend([user_layer, nearest_layer])
-
+    # 기본 뷰
     initial_view = pdk.ViewState(
-        latitude=user_lat,
-        longitude=user_lon,
-        zoom=14,
+        latitude=37.5665,
+        longitude=126.9780,
+        zoom=12,
         pitch=0,
         bearing=0,
     )
 
-# 툴팁
-tooltip = {
-    "html": """
-    <b>{설치기관명}</b><br/>
-    {설치기관주소}<br/>
-    설치위치: {설치위치}
-    """,
-    "style": {"backgroundColor": "white", "color": "black"},
-}
+    layers = []
 
-deck = pdk.Deck(
-    map_style=None,   # 기본 배경 지도
-    initial_view_state=initial_view,
-    layers=layers,
-    tooltip=tooltip,
-)
+    # 🔵 개별 AED 점 레이어
+    aed_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=df,
+        get_position="[경도, 위도]",
+        get_radius=20,
+        radius_min_pixels=3,
+        radius_max_pixels=6,
+        get_fill_color="[0, 120, 255, 160]",  # 파란 점
+        pickable=True,
+    )
+    layers.append(aed_layer)
 
-st.pydeck_chart(deck)
+    # ----- 현재 위치 기반 접근성 분석 -----
+    access_counts = None      # 화면에 보여줄 숫자
+    buffer_df = None          # 동심원(버퍼) 그리기용
 
-st.markdown("""
-- 🔵 파란 점 : AED 1대  
-- 🔴 빨간 점 : 현재 위치  
-- 🟢 초록 점 : 현재 위치 기준 가장 가까운 AED  
-""")
+    if user_lat is not None and user_lon is not None:
+        # AED까지 거리 (m 단위)
+        df_dist = df.copy()
+        df_dist["distance_m"] = df_dist.apply(
+            lambda row: haversine(user_lat, user_lon, row["위도"], row["경도"]) * 1000,
+            axis=1,
+        )
+
+        # 반경별 AED 개수
+        r_list = [100, 300, 500]
+        counts = []
+        for r in r_list:
+            counts.append(int((df_dist["distance_m"] <= r).sum()))
+        access_counts = dict(zip(r_list, counts))
+
+        # 동심원 데이터 (100m / 300m / 500m)
+        buffer_df = pd.DataFrame(
+            [
+                {"위도": user_lat, "경도": user_lon, "radius_m": 100, "label": "100m"},
+                {"위도": user_lat, "경도": user_lon, "radius_m": 300, "label": "300m"},
+                {"위도": user_lat, "경도": user_lon, "radius_m": 500, "label": "500m"},
+            ]
+        )
+
+        # 현재 위치 기준으로 뷰 이동
+        initial_view = pdk.ViewState(
+            latitude=user_lat,
+            longitude=user_lon,
+            zoom=14,
+            pitch=0,
+            bearing=0,
+        )
+
+    # 현재 위치 + 가장 가까운 AED + 동심원 레이어
+    if user_lat is not None and user_lon is not None:
+        # 현재 위치 (빨간 점)
+        user_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=pd.DataFrame([{"위도": user_lat, "경도": user_lon}]),
+            get_position="[경도, 위도]",
+            get_radius=80,
+            radius_min_pixels=6,
+            get_fill_color="[255, 77, 77, 230]",
+        )
+        layers.append(user_layer)
+
+        # 가장 가까운 AED (초록 점)
+        if nearest_row is not None:
+            nearest_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=pd.DataFrame(
+                    [{"위도": nearest_row["위도"], "경도": nearest_row["경도"]}]
+                ),
+                get_position="[경도, 위도]",
+                get_radius=100,
+                radius_min_pixels=7,
+                get_fill_color="[0, 200, 140, 250]",
+            )
+            layers.append(nearest_layer)
+
+        # 동심원 (접근성 버퍼)
+        if buffer_df is not None:
+            buffer_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=buffer_df,
+                get_position="[경도, 위도]",
+                get_radius="radius_m",
+                get_fill_color="[0, 0, 0, 0]",          # 안은 투명
+                stroked=True,
+                get_line_color="[255, 99, 71, 160]",    # 테두리 색
+                line_width_min_pixels=2,
+                pickable=False,
+            )
+            layers.append(buffer_layer)
+
+    # 지도 렌더링
+    tooltip = {
+        "html": """
+        <b>{설치기관명}</b><br/>
+        {설치기관주소}<br/>
+        설치위치: {설치위치}
+        """,
+        "style": {"backgroundColor": "white", "color": "black"},
+    }
+
+    deck = pdk.Deck(
+        map_style=None,
+        initial_view_state=initial_view,
+        layers=layers,
+        tooltip=tooltip,
+    )
+
+    st.pydeck_chart(deck)
+
+    # 접근성 숫자 출력
+    if access_counts is not None:
+        st.markdown("### 🚶 현재 위치 기준 AED 접근성")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("반경 100m 이내 AED 수", f"{access_counts[100]} 개")
+        c2.metric("반경 300m 이내 AED 수", f"{access_counts[300]} 개")
+        c3.metric("반경 500m 이내 AED 수", f"{access_counts[500]} 개")
+
+        st.caption(
+            "※ 반경 거리는 위경도 기반 직선거리(하버사인)로 계산한 값입니다. "
+            "실제 도보 이동 거리와는 차이가 있을 수 있습니다."
+        )
+    else:
+        st.info("좌측 사이드바에서 현재 위치를 입력한 뒤 **[가장 가까운 AED 찾기]** 버튼을 누르면, 접근성 분석 결과가 표시됩니다.")
+
+
+# -------------------------------
+# 탭 2 : 행정동 분석
+# -------------------------------
+with tab_dong:
+    st.subheader("📊 행정동 단위 AED 분포 분석")
+
+    # 1) 행정동 컬럼 만들기
+    df_dong = df.copy()
+    if "설치기관주소" in df_dong.columns:
+        # '○○동', '○○읍', '○○면' 패턴 추출
+        df_dong["행정동"] = df_dong["설치기관주소"].str.extract(r"(\S+[동읍면])")[0]
+    else:
+        df_dong["행정동"] = None
+
+    df_dong = df_dong.dropna(subset=["행정동"])
+
+    if df_dong.empty:
+        st.warning("설치기관주소에서 행정동 정보를 추출하지 못했습니다. 주소 형식을 한 번 확인해 주세요.")
+    else:
+        # 2) 행정동별 AED 개수 집계
+        dong_stats = (
+            df_dong.groupby("행정동")
+            .agg(AED수=("행정동", "size"))
+            .reset_index()
+            .sort_values("AED수", ascending=False)
+        )
+
+        st.markdown("#### 🔝 행정동별 AED 개수 (내림차순)")
+        st.dataframe(dong_stats, use_container_width=True)
+
+        # 3) 상위 N개 막대그래프
+        top_n = st.slider("막대그래프로 볼 상위 행정동 수", min_value=5, max_value=30, value=15, step=1)
+
+        st.markdown(f"#### 📈 상위 {top_n}개 행정동 AED 수 막대그래프")
+        dong_chart_data = dong_stats.head(top_n).set_index("행정동")["AED수"]
+        st.bar_chart(dong_chart_data)
+
+        # 4) 특정 행정동 선택 시 상세 목록
+        st.markdown("#### 🔍 행정동별 AED 상세 목록")
+        selected_dong = st.selectbox("행정동 선택", dong_stats["행정동"].tolist())
+
+        dong_detail = df_dong[df_dong["행정동"] == selected_dong]
+
+        show_cols = [c for c in ["설치기관명", "설치기관주소", "설치위치"] if c in dong_detail.columns]
+        st.write(f"**{selected_dong} AED 목록 (총 {len(dong_detail)}개)**")
+        st.dataframe(dong_detail[show_cols], use_container_width=True)
 
 
 
